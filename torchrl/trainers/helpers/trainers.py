@@ -243,7 +243,7 @@ def make_trainer(
     return trainer
 
 @dataclass
-class TrainConfig: 
+class TrainerConfig: 
     optim_steps_per_batch: int = 500 
     # Number of optimization steps in between two collection of data. See frames_per_batch below. 
     optimizer: str = "adam"

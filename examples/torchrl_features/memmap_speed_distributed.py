@@ -3,18 +3,25 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+from dataclasses import dataclass
 import os
 import time
 
-import configargparse
+from hydra import compose, initialize
+from hydra.core.config_store import ConfigStore
+
 import torch
 import torch.distributed.rpc as rpc
 from torchrl.data.tensordict import MemmapTensor
 
-parser = configargparse.ArgumentParser()
-parser.add_argument("--rank", default=-1, type=int)
-parser.add_argument("--world_size", default=2, type=int)
-parser.add_argument("--tensortype", default="memmap", type=str)
+@dataclass
+class MemmapSpeedConfig: 
+    rank: int = -1
+    world_size: int = 2
+    tensortype: str = "memmap"
+
+cs = ConfigStore.instance()
+cs.store(name="memmap_speed", node=MemmapSpeedConfig)
 
 AGENT_NAME = "main"
 OBSERVER_NAME = "worker{}"
@@ -40,7 +47,8 @@ def op_on_tensor(idx):
 
 
 if __name__ == "__main__":
-    args = parser.parse_args()
+    with initialize(config_path="."): 
+        args = compose(config_name="memmap_speed")
     rank = args.rank
     world_size = args.world_size
     tensortype = args.tensortype
