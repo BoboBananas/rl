@@ -5,7 +5,6 @@
 
 from dataclasses import dataclass
 
-
 @dataclass
 class RecorderConfig:
     record_video: bool = False

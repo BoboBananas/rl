@@ -208,7 +208,6 @@ def make_ppo_loss(model, args) -> PPOLoss:
     )
     return loss_module
 
-
 @dataclass
 class LossConfig:
     loss: str = "double"
@@ -230,7 +229,6 @@ class LossConfig:
     # REDQ uses an arbitrary number of Q-value functions to speed up learning in MF contexts.
     target_entropy: float = None
     # Target entropy for the policy distribution. Default is None (auto calculated as the `target_entropy = -action_dim`)
-
 
 @dataclass
 class PPOLossConfig:

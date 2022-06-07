@@ -3,37 +3,34 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+from dataclasses import dataclass
 import os
 import time
 
-import configargparse
+from hydra import compose, initialize
+from hydra.core.config_store import ConfigStore
+
 import torch
 import torch.distributed.rpc as rpc
 from torchrl.data import TensorDict
 from torchrl.data.tensordict.memmap import set_transfer_ownership
 
-parser = configargparse.ArgumentParser()
-parser.add_argument("--world_size", default=2, type=int)
-parser.add_argument("--rank", default=-1, type=int)
-parser.add_argument("--task", default=1, type=int)
-parser.add_argument("--rank_var", default="SLURM_JOB_ID", type=str)
-parser.add_argument(
-    "--master_addr",
-    type=str,
-    default="localhost",
-    help="""Address of master, will default to localhost if not provided.
-    Master must be able to accept network traffic on the address + port.""",
-)
-parser.add_argument(
-    "--master_port",
-    type=str,
-    default="29500",
-    help="""Port that master is listening on, will default to 29500 if not
-    provided. Master must be able to accept network traffic on the host and port.""",
-)
-parser.add_argument("--memmap", action="store_true")
-parser.add_argument("--cuda", action="store_true")
-parser.add_argument("--shared_mem", action="store_true")
+@dataclass
+class MemmapTdConfig: 
+    world_size: int = 2
+    rank: int = -1
+    task: int = 1
+    rank_var: str = "SLURM_JOB_ID"
+    master_addr: str = "localhost"
+    # Address of master, will default to localhost if not provided. Master must be able to accept network traffic on the address + port.
+    master_port: str = "29500"
+    # Port that master is listening on, will default to 29500 if not provided. Master must be able to accept network traffic on the host and port.
+    memmap: bool = False
+    cuda: bool = False
+    shared_mem: bool = False
+
+cs = ConfigStore.instance()
+cs.store(name="memmap_td", node=MemmapTdConfig)
 
 AGENT_NAME = "main"
 OBSERVER_NAME = "worker{}"
@@ -60,7 +57,8 @@ def tensordict_add_noreturn():
 SIZE = (32, 50, 3, 84, 84)
 
 if __name__ == "__main__":
-    args = parser.parse_args()
+    with initialize(config_path="."): 
+        args = compose(config_name="memmap_td")
     rank = args.rank
     if rank < 0:
         rank = int(os.environ[args.rank_var])

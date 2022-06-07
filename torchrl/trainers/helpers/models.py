@@ -6,6 +6,8 @@
 from dataclasses import dataclass
 from typing import Optional, Sequence
 
+from importlib_metadata import distribution
+
 import torch
 from omegaconf import DictConfig
 from torch import nn, distributions as d
@@ -1150,7 +1152,6 @@ def make_redq_model(
     del td
     return model
 
-
 @dataclass
 class PPOModelConfig:
     gSDE: bool = False
@@ -1169,7 +1170,7 @@ class PPOModelConfig:
 
 
 @dataclass
-class ContinuousModelConfig:  # TODO: conditional statements for this?
+class ContinuousModelConfig: 
     annealing_frames: int = 1000000
     # float of frames used for annealing of the OrnsteinUhlenbeckProcess. Default=1e6.
     noisy: bool = False
@@ -1208,7 +1209,6 @@ class ContinuousModelConfig:  # TODO: conditional statements for this?
     # cells of the value net
     activation: str = "tanh"
     # activation function, either relu or elu or tanh, Default=tanh
-
 
 @dataclass
 class DiscreteModelConfig:

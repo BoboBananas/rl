@@ -38,8 +38,7 @@ def make_replay_buffer(device: DEVICE_TYPING, args: DictConfig) -> ReplayBuffer:
             prefetch=3,
         )
     return buffer
-
-
+  
 @dataclass
 class ReplayArgsConfig:
     buffer_size: int = 1000000

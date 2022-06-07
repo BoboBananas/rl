@@ -368,7 +368,6 @@ def get_stats_random_rollout(
     stats = {"loc": m, "scale": s}
     return stats
 
-
 @dataclass
 class EnvConfig:
     env_library: str = "gym"

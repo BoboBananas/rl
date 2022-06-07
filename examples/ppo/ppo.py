@@ -15,6 +15,15 @@ from torchrl.envs import ParallelEnv, EnvCreator
 from torchrl.envs.transforms import RewardScaling, TransformedEnv
 from torchrl.envs.utils import set_exploration_mode
 from torchrl.record import VideoRecorder
+
+import hydra
+from hydra.core.config_store import ConfigStore
+from omegaconf import DictConfig
+import dataclasses
+
+import torch.cuda
+from torchrl.envs.transforms import RewardScaling, TransformedEnv
+
 from torchrl.trainers.helpers.collectors import (
     make_collector_onpolicy,
     OnPolicyCollectorConfig,
@@ -51,6 +60,10 @@ Config = dataclasses.make_dataclass(cls_name="Config", fields=config_fields)
 cs = ConfigStore.instance()
 cs.store(name="config", node=Config)
 
+Config = dataclasses.make_dataclass(cls_name="Config", fields=config_fields)
+cs = ConfigStore.instance()
+cs.store(name="config", node=Config)
+
 
 @hydra.main(config_path=None, config_name="config")
 def main(cfg: DictConfig):
@@ -59,6 +72,7 @@ def main(cfg: DictConfig):
     if cfg.config_file is not None:
         config_file = OmegaConf.load(cfg.config_file)
         cfg = OmegaConf.merge(cfg, config_file)
+
     args = correct_for_frame_skip(cfg)
 
     if not isinstance(args.reward_scaling, float):
@@ -184,3 +198,4 @@ def main(cfg: DictConfig):
 
 if __name__ == "__main__":
     main()
+
