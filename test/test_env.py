@@ -37,7 +37,13 @@ from torchrl.envs.transforms import (
 )
 from torchrl.envs.utils import step_tensordict
 from torchrl.envs.vec_env import ParallelEnv, SerialEnv
-from torchrl.modules import ActorCriticOperator, TensorDictModule, ValueOperator, Actor
+from torchrl.modules import (
+    ActorCriticOperator,
+    TensorDictModule,
+    ValueOperator,
+    Actor,
+    MLP,
+)
 
 try:
     this_dir = os.path.dirname(os.path.realpath(__file__))
@@ -159,22 +165,26 @@ def test_rollout(env_name, frame_skip, seed=0):
 def test_rollout_predictability(device):
     env = MockSerialEnv(device=device)
     env.set_seed(100)
+    first = 100 % 17
     policy = Actor(torch.nn.Linear(1, 1, bias=False)).to(device)
     for p in policy.parameters():
         p.data.fill_(1.0)
     td_out = env.rollout(policy=policy, max_steps=200)
     assert (
-        torch.arange(100, 200, device=device) == td_out.get("observation").squeeze()
+        torch.arange(first, first + 100, device=device)
+        == td_out.get("observation").squeeze()
     ).all()
     assert (
-        torch.arange(101, 201, device=device)
+        torch.arange(first + 1, first + 101, device=device)
         == td_out.get("next_observation").squeeze()
     ).all()
     assert (
-        torch.arange(101, 201, device=device) == td_out.get("reward").squeeze()
+        torch.arange(first + 1, first + 101, device=device)
+        == td_out.get("reward").squeeze()
     ).all()
     assert (
-        torch.arange(100, 200, device=device) == td_out.get("action").squeeze()
+        torch.arange(first, first + 100, device=device)
+        == td_out.get("action").squeeze()
     ).all()
 
 
@@ -356,7 +366,9 @@ class TestParallel:
                 in_keys=["hidden"],
                 out_keys=["action"],
             ),
-            ValueOperator(module=nn.LazyLinear(1), in_keys=["hidden"]),
+            ValueOperator(
+                module=MLP(out_features=1, num_cells=[]), in_keys=["hidden", "action"]
+            ),
         )
 
         td = TensorDict(
