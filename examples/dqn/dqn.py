@@ -3,75 +3,66 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+import dataclasses
 import uuid
 from datetime import datetime
 
-from torchrl.envs import ParallelEnv, EnvCreator
-from torchrl.envs.utils import set_exploration_mode
-from torchrl.record import VideoRecorder
-
-try:
-    import configargparse as argparse
-
-    _configargparse = True
-except ImportError:
-    import argparse
-
-    _configargparse = False
+import hydra
 import torch.cuda
+from hydra.core.config_store import ConfigStore
+from omegaconf import DictConfig
+from torchrl.envs import ParallelEnv, EnvCreator
 from torchrl.envs.transforms import RewardScaling, TransformedEnv
+from torchrl.envs.utils import set_exploration_mode
 from torchrl.modules import EGreedyWrapper
+from torchrl.record import VideoRecorder
 from torchrl.trainers.helpers.collectors import (
     make_collector_offpolicy,
-    parser_collector_args_offpolicy,
+    OffPolicyCollectorConfig,
 )
 from torchrl.trainers.helpers.envs import (
     correct_for_frame_skip,
     get_stats_random_rollout,
     parallel_env_constructor,
-    parser_env_args,
     transformed_env_constructor,
+    EnvConfig,
 )
-from torchrl.trainers.helpers.losses import make_dqn_loss, parser_loss_args
+from torchrl.trainers.helpers.losses import make_dqn_loss, LossConfig
 from torchrl.trainers.helpers.models import (
     make_dqn_actor,
-    parser_model_args_discrete,
+    DiscreteModelConfig,
 )
-from torchrl.trainers.helpers.recorder import parser_recorder_args
+from torchrl.trainers.helpers.recorder import RecorderConfig
 from torchrl.trainers.helpers.replay_buffer import (
     make_replay_buffer,
-    parser_replay_args,
+    ReplayArgsConfig,
 )
-from torchrl.trainers.helpers.trainers import make_trainer, parser_trainer_args
+from torchrl.trainers.helpers.trainers import make_trainer, TrainerConfig
+
+config_fields = [
+    (config_field.name, config_field.type, config_field)
+    for config_cls in (
+        TrainerConfig,
+        OffPolicyCollectorConfig,
+        EnvConfig,
+        LossConfig,
+        DiscreteModelConfig,
+        RecorderConfig,
+        ReplayArgsConfig,
+    )
+    for config_field in dataclasses.fields(config_cls)
+]
+
+Config = dataclasses.make_dataclass(cls_name="Config", fields=config_fields)
+cs = ConfigStore.instance()
+cs.store(name="config", node=Config)
 
 
-def make_args():
-    parser = argparse.ArgumentParser()
-    if _configargparse:
-        parser.add_argument(
-            "-c",
-            "--config",
-            required=True,
-            is_config_file=True,
-            help="config file path",
-        )
-    parser_trainer_args(parser)
-    parser_collector_args_offpolicy(parser)
-    parser_env_args(parser)
-    parser_loss_args(parser, algorithm="DQN")
-    parser_model_args_discrete(parser)
-    parser_recorder_args(parser)
-    parser_replay_args(parser)
-    return parser
-
-
-parser = make_args()
-
-
-def main(args):
+@hydra.main(config_name="config")
+def main(cfg: DictConfig):
     from torch.utils.tensorboard import SummaryWriter
 
-    args = correct_for_frame_skip(args)
+    args = correct_for_frame_skip(cfg)
 
     if not isinstance(args.reward_scaling, float):
         args.reward_scaling = 1.0
@@ -207,5 +198,4 @@ def main(args):
 
 
 if __name__ == "__main__":
-    args = parser.parse_args()
-    main(args)
+    main()

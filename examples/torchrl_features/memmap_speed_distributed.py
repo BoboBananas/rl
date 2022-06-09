@@ -5,16 +5,24 @@
 
 import os
 import time
+from dataclasses import dataclass
 
-import configargparse
 import torch
 import torch.distributed.rpc as rpc
+from hydra import compose, initialize
+from hydra.core.config_store import ConfigStore
 from torchrl.data.tensordict import MemmapTensor
 
-parser = configargparse.ArgumentParser()
-parser.add_argument("--rank", default=-1, type=int)
-parser.add_argument("--world_size", default=2, type=int)
-parser.add_argument("--tensortype", default="memmap", type=str)
+
+@dataclass
+class MemmapSpeedConfig:
+    rank: int = -1
+    world_size: int = 2
+    tensortype: str = "memmap"
+
+
+cs = ConfigStore.instance()
+cs.store(name="memmap_speed", node=MemmapSpeedConfig)
 
 AGENT_NAME = "main"
 OBSERVER_NAME = "worker{}"
@@ -40,10 +48,11 @@ def op_on_tensor(idx):
 
 
 if __name__ == "__main__":
-    args = parser.parse_args()
-    rank = args.rank
-    world_size = args.world_size
-    tensortype = args.tensortype
+    with initialize(config_path=None):
+        cfg = compose(config_name="memmap_speed")
+    rank = cfg.rank
+    world_size = cfg.world_size
+    tensortype = cfg.tensortype
 
     os.environ["MASTER_ADDR"] = "localhost"
     os.environ["MASTER_PORT"] = "29500"

@@ -5,35 +5,33 @@
 
 import os
 import time
+from dataclasses import dataclass
 
-import configargparse
 import torch
 import torch.distributed.rpc as rpc
+from hydra import compose, initialize
+from hydra.core.config_store import ConfigStore
 from torchrl.data import TensorDict
 from torchrl.data.tensordict.memmap import set_transfer_ownership
 
-parser = configargparse.ArgumentParser()
-parser.add_argument("--world_size", default=2, type=int)
-parser.add_argument("--rank", default=-1, type=int)
-parser.add_argument("--task", default=1, type=int)
-parser.add_argument("--rank_var", default="SLURM_JOB_ID", type=str)
-parser.add_argument(
-    "--master_addr",
-    type=str,
-    default="localhost",
-    help="""Address of master, will default to localhost if not provided.
-    Master must be able to accept network traffic on the address + port.""",
-)
-parser.add_argument(
-    "--master_port",
-    type=str,
-    default="29500",
-    help="""Port that master is listening on, will default to 29500 if not
-    provided. Master must be able to accept network traffic on the host and port.""",
-)
-parser.add_argument("--memmap", action="store_true")
-parser.add_argument("--cuda", action="store_true")
-parser.add_argument("--shared_mem", action="store_true")
+
+@dataclass
+class MemmapTdConfig:
+    world_size: int = 2
+    rank: int = -1
+    task: int = 1
+    rank_var: str = "SLURM_JOB_ID"
+    master_addr: str = "localhost"
+    # Address of master, will default to localhost if not provided. Master must be able to accept network traffic on the address + port.
+    master_port: str = "29500"
+    # Port that master is listening on, will default to 29500 if not provided. Master must be able to accept network traffic on the host and port.
+    memmap: bool = False
+    cuda: bool = False
+    shared_mem: bool = False
+
+
+cs = ConfigStore.instance()
+cs.store(name="memmap_td", node=MemmapTdConfig)
 
 AGENT_NAME = "main"
 OBSERVER_NAME = "worker{}"
@@ -60,12 +58,13 @@ def tensordict_add_noreturn():
 SIZE = (32, 50, 3, 84, 84)
 
 if __name__ == "__main__":
-    args = parser.parse_args()
-    rank = args.rank
+    with initialize(config_path=None):
+        cfg = compose(config_name="memmap_td")
+    rank = cfg.rank
     if rank < 0:
-        rank = int(os.environ[args.rank_var])
+        rank = int(os.environ[cfg.rank_var])
     print("rank: ", rank)
-    world_size = args.world_size
+    world_size = cfg.world_size
 
     os.environ["MASTER_ADDR"] = "localhost"
     os.environ["MASTER_PORT"] = "29500"
@@ -85,22 +84,22 @@ if __name__ == "__main__":
             rpc_backend_options=options,
         )
 
-        if args.task == 0:
+        if cfg.task == 0:
             time.sleep(1)
             t0 = time.time()
-            for w in range(1, args.world_size):
+            for w in range(1, cfg.world_size):
                 fut0 = rpc.rpc_async(f"worker{w}", get_tensordict, args=tuple())
                 fut0.wait()
                 fut1 = rpc.rpc_async(f"worker{w}", tensordict_add, args=tuple())
                 tensordict2 = fut1.wait()
                 tensordict2.clone()
             print("time: ", time.time() - t0)
-        elif args.task == 1:
+        elif cfg.task == 1:
             time.sleep(1)
             t0 = time.time()
             waiters = [
                 rpc.remote(f"worker{w}", get_tensordict, args=tuple())
-                for w in range(1, args.world_size)
+                for w in range(1, cfg.world_size)
             ]
             td = torch.stack([waiter.to_here() for waiter in waiters], 0).contiguous()
             print("time: ", time.time() - t0)
@@ -108,29 +107,29 @@ if __name__ == "__main__":
             t0 = time.time()
             waiters = [
                 rpc.remote(f"worker{w}", tensordict_add, args=tuple())
-                for w in range(1, args.world_size)
+                for w in range(1, cfg.world_size)
             ]
             td = torch.stack([waiter.to_here() for waiter in waiters], 0).contiguous()
             print("time: ", time.time() - t0)
             assert (td[:, 3].get("a") == 1).all()
             assert (td[:, 3].get("b") == 0).all()
 
-        elif args.task == 2:
+        elif cfg.task == 2:
             time.sleep(1)
             t0 = time.time()
-            # waiters = [rpc.rpc_async(f"worker{w}", get_tensordict, args=tuple()) for w in range(1, args.world_size)]
+            # waiters = [rpc.rpc_async(f"worker{w}", get_tensordict, args=tuple()) for w in range(1, cfg.world_size)]
             waiters = [
                 rpc.remote(f"worker{w}", get_tensordict, args=tuple())
-                for w in range(1, args.world_size)
+                for w in range(1, cfg.world_size)
             ]
             # td = torch.stack([waiter.wait() for waiter in waiters], 0).clone()
             td = torch.stack([waiter.to_here() for waiter in waiters], 0)
             print("time to receive objs: ", time.time() - t0)
             t0 = time.time()
-            if args.memmap:
+            if cfg.memmap:
                 waiters = [
                     rpc.remote(f"worker{w}", tensordict_add_noreturn, args=tuple())
-                    for w in range(1, args.world_size)
+                    for w in range(1, cfg.world_size)
                 ]
                 print("temp t: ", time.time() - t0)
                 [
@@ -140,7 +139,7 @@ if __name__ == "__main__":
             else:
                 waiters = [
                     rpc.remote(f"worker{w}", tensordict_add, args=tuple())
-                    for w in range(1, args.world_size)
+                    for w in range(1, cfg.world_size)
                 ]
                 print("temp t: ", time.time() - t0)
                 td = torch.stack([waiter.to_here() for waiter in waiters], 0)
@@ -149,24 +148,24 @@ if __name__ == "__main__":
             assert (td[:, 3].get("b") == 0).all()
             print("time to receive updates: ", time.time() - t0)
 
-        elif args.task == 3:
+        elif cfg.task == 3:
             time.sleep(1)
             t0 = time.time()
             waiters = [
                 rpc.remote(f"worker{w}", get_tensordict, args=tuple())
-                for w in range(1, args.world_size)
+                for w in range(1, cfg.world_size)
             ]
             td = torch.stack([waiter.to_here() for waiter in waiters], 0)
             print("time to receive objs: ", time.time() - t0)
             t0 = time.time()
             waiters = [
                 rpc.remote(f"worker{w}", tensordict_add, args=tuple())
-                for w in range(1, args.world_size)
+                for w in range(1, cfg.world_size)
             ]
             print("temp t: ", time.time() - t0)
             td = torch.stack([waiter.to_here() for waiter in waiters], 0)
             print("temp t: ", time.time() - t0)
-            if args.memmap:
+            if cfg.memmap:
                 print(td[0].get("a").filename)
                 print(td[0].get("a").file)
                 print(td[0].get("a")._has_ownership)
@@ -187,14 +186,14 @@ if __name__ == "__main__":
             },
             batch_size=SIZE[:1],
         )
-        if args.memmap:
+        if cfg.memmap:
             tensordict.memmap_()
             if rank == 1:
                 print(tensordict.get("a").filename)
                 print(tensordict.get("a").file)
-        if args.shared_mem:
+        if cfg.shared_mem:
             tensordict.share_memory_()
-        elif args.cuda:
+        elif cfg.cuda:
             tensordict = tensordict.cuda()
         rpc.init_rpc(
             OBSERVER_NAME.format(rank),
