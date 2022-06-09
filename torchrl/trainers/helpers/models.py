@@ -78,32 +78,39 @@ __all__ = [
 
 
 def make_dqn_actor(
-    proof_environment: _EnvClass, args: DictConfig, device: torch.device
+    proof_environment: _EnvClass, cfg: DictConfig, device: torch.device
 ) -> Actor:
     """
     DQN constructor helper function.
 
     Args:
         proof_environment (_EnvClass): a dummy environment to retrieve the observation and action spec.
-        args (argparse.Namespace): arguments of the DQN script
+        cfg (DictConfig): contains arguments of the DQN script
         device (torch.device): device on which the model must be cast
 
     Returns:
          A DQN policy operator.
 
     Examples:
-        >>> from torchrl.trainers.helpers.models import make_dqn_actor, parser_model_args_discrete
-        >>> from torchrl.trainers.helpers.envs import parser_env_args
+        >>> from torchrl.trainers.helpers.models import make_dqn_actor, DiscreteModelConfig
+        >>> from torchrl.trainers.helpers.envs import EnvConfig
         >>> from torchrl.envs import GymEnv
         >>> from torchrl.envs.transforms import ToTensorImage, TransformedEnv
-        >>> import argparse
+        >>> import hydra
+        >>> from hydra.core.config_store import ConfigStore
+        >>> import dataclasses
         >>> proof_environment = TransformedEnv(GymEnv("ALE/Pong-v5",
         ...    pixels_only=True), ToTensorImage())
         >>> device = torch.device("cpu")
-        >>> parser = parser_env_args(argparse.ArgumentParser())
-        >>> parser = parser_model_args_discrete(parser)
-        >>> args = parser.parse_args(['--env_name', 'ALE/Pong-v5', '--from_pixels'])
-        >>> actor = make_dqn_actor(proof_environment, args, device)
+        >>> config_fields = [(config_field.name, config_field.type, config_field) for config_cls in 
+        ...                    (DiscreteModelConfig, EnvConfig) 
+        ...                   for config_field in dataclasses.fields(config_cls)]
+        >>> Config = dataclasses.make_dataclass(cls_name="Config", fields=config_fields)
+        >>> cs = ConfigStore.instance()
+        >>> cs.store(name="config", node=Config)
+        >>> with initialize(config_path=None): 
+        >>>     cfg = compose(config_name="config")
+        >>> actor = make_dqn_actor(proof_environment, cfg, device)
         >>> _ = proof_environment.reset()
         >>> td = proof_environment.current_tensordict
         >>> print(actor(td))
@@ -122,8 +129,8 @@ def make_dqn_actor(
     """
     env_specs = proof_environment.specs
 
-    atoms = args.atoms if args.distributional else None
-    linear_layer_class = torch.nn.Linear if not args.noisy else NoisyLinear
+    atoms = cfg.atoms if cfg.distributional else None
+    linear_layer_class = torch.nn.Linear if not cfg.noisy else NoisyLinear
 
     action_spec = env_specs["action_spec"]
     if action_spec.domain != "discrete":
@@ -134,7 +141,7 @@ def make_dqn_actor(
             f"domain."
         )
 
-    if args.from_pixels:
+    if cfg.from_pixels:
         net_class = DuelingCnnDQNet
         default_net_kwargs = {
             "cnn_kwargs": {
@@ -160,7 +167,7 @@ def make_dqn_actor(
     out_features = env_specs["action_spec"].shape[0]
     actor_class = QValueActor
     actor_kwargs = {}
-    if args.distributional:
+    if cfg.distributional:
         if not atoms:
             raise RuntimeError(
                 "Expected atoms to be a positive integer, " f"got {atoms}"
@@ -196,7 +203,7 @@ def make_dqn_actor(
 
 def make_ddpg_actor(
     proof_environment: _EnvClass,
-    args: DictConfig,
+    cfg: DictConfig,
     actor_net_kwargs: Optional[dict] = None,
     value_net_kwargs: Optional[dict] = None,
     device: DEVICE_TYPING = "cpu",
@@ -206,7 +213,7 @@ def make_ddpg_actor(
 
     Args:
         proof_environment (_EnvClass): a dummy environment to retrieve the observation and action spec
-        args (argparse.Namespace): arguments of the DDPG script
+        cfg (DictConfig): contains arguments of the DDPG script
         actor_net_kwargs (dict, optional): kwargs to be used for the policy network (either DdpgCnnActor or
             DdpgMlpActor).
         value_net_kwargs (dict, optional): kwargs to be used for the policy network (either DdpgCnnQNet or
@@ -224,17 +231,24 @@ def make_ddpg_actor(
         >>> from torchrl.trainers.helpers.models import make_ddpg_actor, parser_model_args_continuous
         >>> from torchrl.envs import GymEnv
         >>> from torchrl.envs.transforms import CatTensors, TransformedEnv, DoubleToFloat, Compose
-        >>> import argparse
+        >>> import hydra
+        >>> from hydra.core.config_store import ConfigStore
+        >>> import dataclasses
         >>> proof_environment = TransformedEnv(GymEnv("HalfCheetah-v2"), Compose(DoubleToFloat(["next_observation"]),
         ...    CatTensors(["next_observation"], "next_observation_vector")))
         >>> device = torch.device("cpu")
-        >>> parser = argparse.ArgumentParser()
-        >>> parser = parser_env_args(parser)
-        >>> args = parser_model_args_continuous(parser, algorithm="DDPG").parse_args([])
+        >>> config_fields = [(config_field.name, config_field.type, config_field) for config_cls in 
+        ...                    (DDPGModelConfig, EnvConfig) 
+        ...                   for config_field in dataclasses.fields(config_cls)]
+        >>> Config = dataclasses.make_dataclass(cls_name="Config", fields=config_fields)
+        >>> cs = ConfigStore.instance()
+        >>> cs.store(name="config", node=Config)
+        >>> with initialize(config_path=None): 
+        >>>     cfg = compose(config_name="config")
         >>> actor, value = make_ddpg_actor(
         ...     proof_environment,
         ...     device=device,
-        ...     args=args)
+        ...     cfg=cfg)
         >>> _ = proof_environment.reset()
         >>> td = proof_environment.current_tensordict
         >>> print(actor(td))
@@ -262,8 +276,8 @@ def make_ddpg_actor(
 
     # TODO: https://arxiv.org/pdf/1804.08617.pdf
 
-    from_pixels = args.from_pixels
-    noisy = args.noisy
+    from_pixels = cfg.from_pixels
+    noisy = cfg.noisy
 
     actor_net_kwargs = actor_net_kwargs if actor_net_kwargs is not None else dict()
     value_net_kwargs = value_net_kwargs if value_net_kwargs is not None else dict()
@@ -277,14 +291,14 @@ def make_ddpg_actor(
         "action_dim": out_features,
         "mlp_net_kwargs": {
             "layer_class": linear_layer_class,
-            "activation_class": ACTIVATIONS[args.activation],
+            "activation_class": ACTIVATIONS[cfg.activation],
         },
     }
     actor_net_default_kwargs.update(actor_net_kwargs)
     if from_pixels:
         in_keys = ["pixels"]
         actor_net_default_kwargs["conv_net_kwargs"] = {
-            "activation_class": ACTIVATIONS[args.activation]
+            "activation_class": ACTIVATIONS[cfg.activation]
         }
         actor_net = DdpgCnnActor(**actor_net_default_kwargs)
         gSDE_state_key = "hidden"
@@ -296,7 +310,7 @@ def make_ddpg_actor(
         out_keys = ["param"]
     actor_module = TensorDictModule(actor_net, in_keys=in_keys, out_keys=out_keys)
 
-    if args.gSDE:
+    if cfg.gSDE:
         min = env_specs["action_spec"].space.minimum
         max = env_specs["action_spec"].space.maximum
         transform = SafeTanhTransform()
@@ -332,7 +346,7 @@ def make_ddpg_actor(
         value_net_default_kwargs = {
             "mlp_net_kwargs": {
                 "layer_class": linear_layer_class,
-                "activation_class": ACTIVATIONS[args.activation],
+                "activation_class": ACTIVATIONS[cfg.activation],
             }
         }
         value_net_default_kwargs.update(value_net_kwargs)
@@ -341,20 +355,20 @@ def make_ddpg_actor(
         out_keys = ["state_action_value"]
         q_net = DdpgCnnQNet(**value_net_default_kwargs)
     else:
-        value_net_default_kwargs1 = {"activation_class": ACTIVATIONS[args.activation]}
+        value_net_default_kwargs1 = {"activation_class": ACTIVATIONS[cfg.activation]}
         value_net_default_kwargs1.update(
             value_net_kwargs.get(
                 "mlp_net_kwargs_net1",
                 {
                     "layer_class": linear_layer_class,
-                    "activation_class": ACTIVATIONS[args.activation],
+                    "activation_class": ACTIVATIONS[cfg.activation],
                     "bias_last_layer": True,
                 },
             )
         )
         value_net_default_kwargs2 = {
             "num_cells": [400, 300],
-            "activation_class": ACTIVATIONS[args.activation],
+            "activation_class": ACTIVATIONS[cfg.activation],
             "bias_last_layer": True,
         }
         value_net_default_kwargs2.update(
@@ -392,7 +406,7 @@ def make_ddpg_actor(
 
 def make_ppo_model(
     proof_environment: _EnvClass,
-    args: DictConfig,
+    cfg: DictConfig,
     device: DEVICE_TYPING,
     in_keys_actor: Optional[Sequence[str]] = None,
     observation_key=None,
@@ -406,11 +420,11 @@ def make_ppo_model(
 
     Args:
         proof_environment (_EnvClass): a dummy environment to retrieve the observation and action spec
-        args (argparse.Namespace): arguments of the PPO script
+        cfg (DictConfig): contains arguments of the PPO script
         device (torch.device): device on which the model must be cast.
         in_keys_actor (iterable of strings, optional): observation key to be read by the actor, usually one of
             `'observation_vector'` or `'pixels'`. If none is provided, one of these two keys is chosen based on
-            the `args.from_pixels` argument.
+            the `cfg.from_pixels` argument.
 
     Returns:
          A joined ActorCriticOperator.
@@ -420,17 +434,24 @@ def make_ppo_model(
         >>> from torchrl.trainers.helpers.models import make_ppo_model, parser_model_args_continuous
         >>> from torchrl.envs import GymEnv
         >>> from torchrl.envs.transforms import CatTensors, TransformedEnv, DoubleToFloat, Compose
-        >>> import argparse
+        >>> import hydra
+        >>> from hydra.core.config_store import ConfigStore
+        >>> import dataclasses
         >>> proof_environment = TransformedEnv(GymEnv("HalfCheetah-v2"), Compose(DoubleToFloat(["next_observation"]),
         ...    CatTensors(["next_observation"], "next_observation_vector")))
         >>> device = torch.device("cpu")
-        >>> parser = argparse.ArgumentParser()
-        >>> parser = parser_env_args(parser)
-        >>> args = parser_model_args_continuous(parser, algorithm="PPO").parse_args(["--shared_mapping"])
+        >>> config_fields = [(config_field.name, config_field.type, config_field) for config_cls in 
+        ...                    (PPOModelConfig, EnvConfig) 
+        ...                   for config_field in dataclasses.fields(config_cls)]
+        >>> Config = dataclasses.make_dataclass(cls_name="Config", fields=config_fields)
+        >>> cs = ConfigStore.instance()
+        >>> cs.store(name="config", node=Config)
+        >>> with initialize(config_path=None): 
+        >>>     cfg = compose(config_name="config")
         >>> actor_value = make_ppo_model(
         ...     proof_environment,
         ...     device=device,
-        ...     args=args,
+        ...     cfg=cfg,
         ...     )
         >>> actor = actor_value.get_policy_operator()
         >>> value = actor_value.get_value_operator()
@@ -461,7 +482,7 @@ def make_ppo_model(
             is_shared=False)
 
     """
-    # proof_environment.set_seed(args.seed)
+    # proof_environment.set_seed(cfg.seed)
     specs = proof_environment.specs  # TODO: use env.sepcs
     action_spec = specs["action_spec"]
     obs_spec = specs["observation_spec"]
@@ -489,19 +510,19 @@ def make_ppo_model(
     out_keys = ["action"]
 
     if action_spec.domain == "continuous":
-        out_features = (2 - args.gSDE) * action_spec.shape[-1]
-        if args.distribution == "tanh_normal":
+        out_features = (2 - cfg.gSDE) * action_spec.shape[-1]
+        if cfg.distribution == "tanh_normal":
             policy_distribution_kwargs = {
                 "min": action_spec.space.minimum,
                 "max": action_spec.space.maximum,
-                "tanh_loc": args.tanh_loc,
+                "tanh_loc": cfg.tanh_loc,
             }
             policy_distribution_class = TanhNormal
-        elif args.distribution == "truncated_normal":
+        elif cfg.distribution == "truncated_normal":
             policy_distribution_kwargs = {
                 "min": action_spec.space.minimum,
                 "max": action_spec.space.maximum,
-                "tanh_loc": args.tanh_loc,
+                "tanh_loc": cfg.tanh_loc,
             }
             policy_distribution_class = TruncatedNormal
     elif action_spec.domain == "discrete":
@@ -513,7 +534,7 @@ def make_ppo_model(
             f"actions with domain {action_spec.domain} are not supported"
         )
 
-    if args.shared_mapping:
+    if cfg.shared_mapping:
         hidden_features = 300
         if proof_environment.from_pixels:
             if in_keys_actor is None:
@@ -526,7 +547,7 @@ def make_ppo_model(
                 strides=[4, 2, 1],
             )
         else:
-            if args.lstm:
+            if cfg.lstm:
                 raise NotImplementedError(
                     "lstm not yet compatible with shared mapping for PPO"
                 )
@@ -548,9 +569,9 @@ def make_ppo_model(
             num_cells=[200],
             out_features=out_features,
         )
-        if not args.gSDE:
+        if not cfg.gSDE:
             actor_net = NormalParamWrapper(
-                policy_net, scale_mapping=f"biased_softplus_{args.default_policy_scale}"
+                policy_net, scale_mapping=f"biased_softplus_{cfg.default_policy_scale}"
             )
             in_keys = ["hidden"]
             actor_module = TensorDictModule(
@@ -606,11 +627,11 @@ def make_ppo_model(
             value_operator=value_operator,
         ).to(device)
     else:
-        if args.from_pixels:
+        if cfg.from_pixels:
             raise RuntimeError(
                 "PPO learnt from pixels require the shared_mapping to be set to True."
             )
-        if args.lstm:
+        if cfg.lstm:
             policy_net = LSTMNet(
                 out_features=out_features,
                 lstm_kwargs={"input_size": 256, "hidden_size": 256},
@@ -624,9 +645,9 @@ def make_ppo_model(
                 out_features=out_features,
             )
 
-        if not args.gSDE:
+        if not cfg.gSDE:
             actor_net = NormalParamWrapper(
-                policy_net, scale_mapping=f"biased_softplus_{args.default_policy_scale}"
+                policy_net, scale_mapping=f"biased_softplus_{cfg.default_policy_scale}"
             )
             actor_module = TensorDictModule(
                 actor_net, in_keys=in_keys_actor, out_keys=["loc", "scale"]
@@ -690,7 +711,7 @@ def make_ppo_model(
 
 def make_sac_model(
     proof_environment: _EnvClass,
-    args: DictConfig,
+    cfg: DictConfig,
     device: DEVICE_TYPING = "cpu",
     in_keys: Optional[Sequence[str]] = None,
     actor_net_kwargs=None,
@@ -707,11 +728,11 @@ def make_sac_model(
 
     Args:
         proof_environment (_EnvClass): a dummy environment to retrieve the observation and action spec
-        args (argparse.Namespace): arguments of the SAC script
+        cfg (DictConfig): contains arguments of the SAC script
         device (torch.device, optional): device on which the model must be cast. Default is "cpu".
         in_keys (iterable of strings, optional): observation key to be read by the actor, usually one of
             `'observation_vector'` or `'pixels'`. If none is provided, one of these two keys is chosen
-             based on the `args.from_pixels` argument.
+             based on the `cfg.from_pixels` argument.
         actor_net_kwargs (dict, optional): kwargs of the actor MLP.
         qvalue_net_kwargs (dict, optional): kwargs of the qvalue MLP.
         value_net_kwargs (dict, optional): kwargs of the value MLP.
@@ -724,18 +745,24 @@ def make_sac_model(
         >>> from torchrl.trainers.helpers.models import make_sac_model, parser_model_args_continuous
         >>> from torchrl.envs import GymEnv
         >>> from torchrl.envs.transforms import CatTensors, TransformedEnv, DoubleToFloat, Compose
-        >>> import argparse
+        >>> import hydra
+        >>> from hydra.core.config_store import ConfigStore
+        >>> import dataclasses
         >>> proof_environment = TransformedEnv(GymEnv("HalfCheetah-v2"), Compose(DoubleToFloat(["next_observation"]),
         ...    CatTensors(["next_observation"], "next_observation_vector")))
         >>> device = torch.device("cpu")
-        >>> parser = argparse.ArgumentParser()
-        >>> parser = parser_env_args(parser)
-        >>> args = parser_model_args_continuous(parser,
-        ...    algorithm="SAC").parse_args([])
+        >>> config_fields = [(config_field.name, config_field.type, config_field) for config_cls in 
+        ...                    (SACModelConfig, EnvConfig) 
+        ...                   for config_field in dataclasses.fields(config_cls)]
+        >>> Config = dataclasses.make_dataclass(cls_name="Config", fields=config_fields)
+        >>> cs = ConfigStore.instance()
+        >>> cs.store(name="config", node=Config)
+        >>> with initialize(config_path=None): 
+        >>>     cfg = compose(config_name="config")
         >>> model = make_sac_model(
         ...     proof_environment,
         ...     device=device,
-        ...     args=args,
+        ...     cfg=cfg,
         ...     )
         >>> actor, qvalue, value = model
         >>> _ = proof_environment.reset()
@@ -777,9 +804,9 @@ def make_sac_model(
             is_shared=False)
 
     """
-    tanh_loc = args.tanh_loc
-    default_policy_scale = args.default_policy_scale
-    gSDE = args.gSDE
+    tanh_loc = cfg.tanh_loc
+    default_policy_scale = cfg.default_policy_scale
+    gSDE = cfg.gSDE
 
     proof_environment.reset()
     td = proof_environment.current_tensordict
@@ -811,17 +838,17 @@ def make_sac_model(
         in_keys = ["observation_vector"]
 
     actor_net_kwargs_default = {
-        "num_cells": [args.actor_cells, args.actor_cells],
+        "num_cells": [cfg.actor_cells, cfg.actor_cells],
         "out_features": (2 - gSDE) * action_spec.shape[-1],
-        "activation_class": ACTIVATIONS[args.activation],
+        "activation_class": ACTIVATIONS[cfg.activation],
     }
     actor_net_kwargs_default.update(actor_net_kwargs)
     actor_net = MLP(**actor_net_kwargs_default)
 
     qvalue_net_kwargs_default = {
-        "num_cells": [args.qvalue_cells, args.qvalue_cells],
+        "num_cells": [cfg.qvalue_cells, cfg.qvalue_cells],
         "out_features": 1,
-        "activation_class": ACTIVATIONS[args.activation],
+        "activation_class": ACTIVATIONS[cfg.activation],
     }
     qvalue_net_kwargs_default.update(qvalue_net_kwargs)
     qvalue_net = MLP(
@@ -829,9 +856,9 @@ def make_sac_model(
     )
 
     value_net_kwargs_default = {
-        "num_cells": [args.value_cells, args.value_cells],
+        "num_cells": [cfg.value_cells, cfg.value_cells],
         "out_features": 1,
-        "activation_class": ACTIVATIONS[args.activation],
+        "activation_class": ACTIVATIONS[cfg.activation],
     }
     value_net_kwargs_default.update(value_net_kwargs)
     value_net = MLP(
@@ -849,7 +876,7 @@ def make_sac_model(
         actor_net = NormalParamWrapper(
             actor_net,
             scale_mapping=f"biased_softplus_{default_policy_scale}",
-            scale_lb=args.scale_lb,
+            scale_lb=cfg.scale_lb,
         )
         in_keys_actor = in_keys
         actor_module = TensorDictModule(
@@ -922,7 +949,7 @@ def make_sac_model(
 
 def make_redq_model(
     proof_environment: _EnvClass,
-    args: DictConfig,
+    cfg: DictConfig,
     device: DEVICE_TYPING = "cpu",
     in_keys: Optional[Sequence[str]] = None,
     actor_net_kwargs=None,
@@ -938,11 +965,11 @@ def make_redq_model(
 
     Args:
         proof_environment (_EnvClass): a dummy environment to retrieve the observation and action spec
-        args (argparse.Namespace): arguments of the REDQ script
+        cfg (DictConfig): contains arguments of the REDQ script
         device (torch.device, optional): device on which the model must be cast. Default is "cpu".
         in_keys (iterable of strings, optional): observation key to be read by the actor, usually one of
             `'observation_vector'` or `'pixels'`. If none is provided, one of these two keys is chosen
-             based on the `args.from_pixels` argument.
+             based on the `cfg.from_pixels` argument.
         actor_net_kwargs (dict, optional): kwargs of the actor MLP.
         qvalue_net_kwargs (dict, optional): kwargs of the qvalue MLP.
 
@@ -954,18 +981,24 @@ def make_redq_model(
         >>> from torchrl.trainers.helpers.models import make_redq_model, parser_model_args_continuous
         >>> from torchrl.envs import GymEnv
         >>> from torchrl.envs.transforms import CatTensors, TransformedEnv, DoubleToFloat, Compose
-        >>> import argparse
+        >>> import hydra
+        >>> from hydra.core.config_store import ConfigStore
+        >>> import dataclasses
         >>> proof_environment = TransformedEnv(GymEnv("HalfCheetah-v2"), Compose(DoubleToFloat(["next_observation"]),
         ...    CatTensors(["next_observation"], "next_observation_vector")))
         >>> device = torch.device("cpu")
-        >>> parser = argparse.ArgumentParser()
-        >>> parser = parser_env_args(parser)
-        >>> args = parser_model_args_continuous(parser,
-        ...    algorithm="REDQ").parse_args([])
+        >>> config_fields = [(config_field.name, config_field.type, config_field) for config_cls in 
+        ...                    (RedqModelConfig, EnvConfig) 
+        ...                   for config_field in dataclasses.fields(config_cls)]
+        >>> Config = dataclasses.make_dataclass(cls_name="Config", fields=config_fields)
+        >>> cs = ConfigStore.instance()
+        >>> cs.store(name="config", node=Config)
+        >>> with initialize(config_path=None): 
+        >>>     cfg = compose(config_name="config")
         >>> model = make_redq_model(
         ...     proof_environment,
         ...     device=device,
-        ...     args=args,
+        ...     cfg=cfg,
         ...     )
         >>> actor, qvalue = model
         >>> _ = proof_environment.reset()
@@ -998,9 +1031,9 @@ def make_redq_model(
 
     """
 
-    tanh_loc = args.tanh_loc
-    default_policy_scale = args.default_policy_scale
-    gSDE = args.gSDE
+    tanh_loc = cfg.tanh_loc
+    default_policy_scale = cfg.default_policy_scale
+    gSDE = cfg.gSDE
 
     action_spec = proof_environment.action_spec
     # obs_spec = proof_environment.observation_spec
@@ -1023,10 +1056,10 @@ def make_redq_model(
     if qvalue_net_kwargs is None:
         qvalue_net_kwargs = {}
 
-    linear_layer_class = torch.nn.Linear if not args.noisy else NoisyLinear
+    linear_layer_class = torch.nn.Linear if not cfg.noisy else NoisyLinear
 
     out_features_actor = (2 - gSDE) * action_spec.shape[-1]
-    if args.from_pixels:
+    if cfg.from_pixels:
         if in_keys is None:
             in_keys_actor = ["pixels"]
         else:
@@ -1034,9 +1067,9 @@ def make_redq_model(
         actor_net_kwargs_default = {
             "mlp_net_kwargs": {
                 "layer_class": linear_layer_class,
-                "activation_class": ACTIVATIONS[args.activation],
+                "activation_class": ACTIVATIONS[cfg.activation],
             },
-            "conv_net_kwargs": {"activation_class": ACTIVATIONS[args.activation]},
+            "conv_net_kwargs": {"activation_class": ACTIVATIONS[cfg.activation]},
         }
         actor_net_kwargs_default.update(actor_net_kwargs)
         actor_net = DdpgCnnActor(out_features_actor, **actor_net_kwargs_default)
@@ -1046,9 +1079,9 @@ def make_redq_model(
         value_net_default_kwargs = {
             "mlp_net_kwargs": {
                 "layer_class": linear_layer_class,
-                "activation_class": ACTIVATIONS[args.activation],
+                "activation_class": ACTIVATIONS[cfg.activation],
             },
-            "conv_net_kwargs": {"activation_class": ACTIVATIONS[args.activation]},
+            "conv_net_kwargs": {"activation_class": ACTIVATIONS[cfg.activation]},
         }
         value_net_default_kwargs.update(qvalue_net_kwargs)
 
@@ -1061,9 +1094,9 @@ def make_redq_model(
             in_keys_actor = in_keys
 
         actor_net_kwargs_default = {
-            "num_cells": [args.actor_cells, args.actor_cells],
+            "num_cells": [cfg.actor_cells, cfg.actor_cells],
             "out_features": out_features_actor,
-            "activation_class": ACTIVATIONS[args.activation],
+            "activation_class": ACTIVATIONS[cfg.activation],
         }
         actor_net_kwargs_default.update(actor_net_kwargs)
         actor_net = MLP(**actor_net_kwargs_default)
@@ -1071,9 +1104,9 @@ def make_redq_model(
         gSDE_state_key = in_keys_actor[0]
 
         qvalue_net_kwargs_default = {
-            "num_cells": [args.qvalue_cells, args.qvalue_cells],
+            "num_cells": [cfg.qvalue_cells, cfg.qvalue_cells],
             "out_features": 1,
-            "activation_class": ACTIVATIONS[args.activation],
+            "activation_class": ACTIVATIONS[cfg.activation],
         }
         qvalue_net_kwargs_default.update(qvalue_net_kwargs)
         qvalue_net = MLP(
@@ -1092,7 +1125,7 @@ def make_redq_model(
         actor_net = NormalParamWrapper(
             actor_net,
             scale_mapping=f"biased_softplus_{default_policy_scale}",
-            scale_lb=args.scale_lb,
+            scale_lb=cfg.scale_lb,
         )
         actor_module = TensorDictModule(
             actor_net,

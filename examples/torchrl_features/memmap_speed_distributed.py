@@ -47,11 +47,11 @@ def op_on_tensor(idx):
 
 
 if __name__ == "__main__":
-    with initialize(config_path="."): 
-        args = compose(config_name="memmap_speed")
-    rank = args.rank
-    world_size = args.world_size
-    tensortype = args.tensortype
+    with initialize(config_path=None): 
+        cfg = compose(config_name="memmap_speed")
+    rank = cfg.rank
+    world_size = cfg.world_size
+    tensortype = cfg.tensortype
 
     os.environ["MASTER_ADDR"] = "localhost"
     os.environ["MASTER_PORT"] = "29500"
