@@ -3,20 +3,20 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from dataclasses import dataclass
 import os
 import time
-
-from hydra import compose, initialize
-from hydra.core.config_store import ConfigStore
+from dataclasses import dataclass
 
 import torch
 import torch.distributed.rpc as rpc
+from hydra import compose, initialize
+from hydra.core.config_store import ConfigStore
 from torchrl.data import TensorDict
 from torchrl.data.tensordict.memmap import set_transfer_ownership
 
+
 @dataclass
-class MemmapTdConfig: 
+class MemmapTdConfig:
     world_size: int = 2
     rank: int = -1
     task: int = 1
@@ -28,6 +28,7 @@ class MemmapTdConfig:
     memmap: bool = False
     cuda: bool = False
     shared_mem: bool = False
+
 
 cs = ConfigStore.instance()
 cs.store(name="memmap_td", node=MemmapTdConfig)
@@ -57,7 +58,7 @@ def tensordict_add_noreturn():
 SIZE = (32, 50, 3, 84, 84)
 
 if __name__ == "__main__":
-    with initialize(config_path=None): 
+    with initialize(config_path=None):
         cfg = compose(config_name="memmap_td")
     rank = cfg.rank
     if rank < 0:

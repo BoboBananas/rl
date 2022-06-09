@@ -15,15 +15,6 @@ from torchrl.envs import ParallelEnv, EnvCreator
 from torchrl.envs.transforms import RewardScaling, TransformedEnv
 from torchrl.envs.utils import set_exploration_mode
 from torchrl.record import VideoRecorder
-
-import hydra
-from hydra.core.config_store import ConfigStore
-from omegaconf import DictConfig
-import dataclasses
-
-import torch.cuda
-from torchrl.envs.transforms import RewardScaling, TransformedEnv
-
 from torchrl.trainers.helpers.collectors import (
     make_collector_onpolicy,
     OnPolicyCollectorConfig,
@@ -198,4 +189,3 @@ def main(cfg: DictConfig):
 
 if __name__ == "__main__":
     main()
-

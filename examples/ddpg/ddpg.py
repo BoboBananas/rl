@@ -3,21 +3,19 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+import dataclasses
 import uuid
 from datetime import datetime
 
-from torchrl.envs import ParallelEnv, EnvCreator
-from torchrl.envs.utils import set_exploration_mode
-from torchrl.record import VideoRecorder
-
 import hydra
+import torch.cuda
 from hydra.core.config_store import ConfigStore
 from omegaconf import DictConfig
-import dataclasses
-
-import torch.cuda
+from torchrl.envs import ParallelEnv, EnvCreator
 from torchrl.envs.transforms import RewardScaling, TransformedEnv
+from torchrl.envs.utils import set_exploration_mode
 from torchrl.modules import OrnsteinUhlenbeckProcessWrapper
+from torchrl.record import VideoRecorder
 from torchrl.trainers.helpers.collectors import (
     make_collector_offpolicy,
     OffPolicyCollectorConfig,
@@ -27,7 +25,7 @@ from torchrl.trainers.helpers.envs import (
     get_stats_random_rollout,
     parallel_env_constructor,
     transformed_env_constructor,
-    EnvConfig, 
+    EnvConfig,
 )
 from torchrl.trainers.helpers.losses import make_ddpg_loss, LossConfig
 from torchrl.trainers.helpers.models import (
@@ -41,9 +39,18 @@ from torchrl.trainers.helpers.replay_buffer import (
 )
 from torchrl.trainers.helpers.trainers import make_trainer, TrainerConfig
 
-config_fields = [(config_field.name, config_field.type, config_field) for config_cls in 
-    (TrainerConfig, OffPolicyCollectorConfig, EnvConfig, LossConfig, ContinuousModelConfig, RecorderConfig, ReplayArgsConfig) 
-    for config_field in dataclasses.fields(config_cls) 
+config_fields = [
+    (config_field.name, config_field.type, config_field)
+    for config_cls in (
+        TrainerConfig,
+        OffPolicyCollectorConfig,
+        EnvConfig,
+        LossConfig,
+        ContinuousModelConfig,
+        RecorderConfig,
+        ReplayArgsConfig,
+    )
+    for config_field in dataclasses.fields(config_cls)
 ]
 
 Config = dataclasses.make_dataclass(cls_name="Config", fields=config_fields)
@@ -59,6 +66,7 @@ DEFAULT_REWARD_SCALING = {
     "Humanoid-v2": 20,
     "humanoid": 100,
 }
+
 
 @hydra.main(config_name="config")
 def main(cfg: DictConfig):
