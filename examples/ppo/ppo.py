@@ -66,7 +66,7 @@ parser = make_args()
 
 def main(args):
     from torch.utils.tensorboard import SummaryWriter
-
+    torch.manual_seed(args.seed)
     args = correct_for_frame_skip(args)
 
     if not isinstance(args.reward_scaling, float):
