@@ -8,6 +8,7 @@ import uuid
 from datetime import datetime
 
 import hydra
+import numpy as np
 import torch.cuda
 from hydra.core.config_store import ConfigStore
 from torchrl.envs import ParallelEnv, EnvCreator
@@ -54,7 +55,9 @@ cs.store(name="config", node=Config)
 @hydra.main(version_base=None, config_path=None, config_name="config")
 def main(cfg: "DictConfig"):
     from torch.utils.tensorboard import SummaryWriter
-
+    
+    torch.manual_seed(cfg.seed)
+    np.random.seed(cfg.seed)
     cfg = correct_for_frame_skip(cfg)
 
     if not isinstance(cfg.reward_scaling, float):
