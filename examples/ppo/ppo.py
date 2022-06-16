@@ -9,6 +9,7 @@ from datetime import datetime
 from torchrl.envs import ParallelEnv, EnvCreator
 from torchrl.envs.utils import set_exploration_mode
 from torchrl.record import VideoRecorder
+import numpy as np
 
 try:
     import configargparse as argparse
@@ -66,7 +67,9 @@ parser = make_args()
 
 def main(args):
     from torch.utils.tensorboard import SummaryWriter
+
     torch.manual_seed(args.seed)
+    np.random.seed(args.seed)
     args = correct_for_frame_skip(args)
 
     if not isinstance(args.reward_scaling, float):
