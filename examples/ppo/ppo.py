@@ -81,6 +81,8 @@ def main(cfg: "DictConfig"):
     video_tag = exp_name if cfg.record_video else ""
 
     stats = None
+    torch.manual_seed(cfg.seed)
+    np.random.seed(cfg.seed)
     if not cfg.vecnorm and cfg.norm_stats:
         proof_env = transformed_env_constructor(cfg=cfg, use_env_creator=False)()
         stats = get_stats_random_rollout(
@@ -93,7 +95,9 @@ def main(cfg: "DictConfig"):
     proof_env = transformed_env_constructor(
         cfg=cfg, use_env_creator=False, stats=stats
     )()
-
+    
+    torch.manual_seed(cfg.seed)
+    np.random.seed(cfg.seed)
     model = make_ppo_model(
         proof_env,
         cfg=cfg,
@@ -174,7 +178,10 @@ def main(cfg: "DictConfig"):
     if cfg.loss == "kl":
         trainer.register_op("pre_optim_steps", loss_module.reset)
 
-    final_seed = collector.set_seed(cfg.seed)
+    # final_seed = collector.set_seed(cfg.seed)
+    final_seed = cfg.seed
+    torch.manual_seed(cfg.seed)
+    np.random.seed(cfg.seed)
     print(f"init seed: {cfg.seed}, final seed: {final_seed}")
 
     trainer.train()

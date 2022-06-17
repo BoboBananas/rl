@@ -12,7 +12,7 @@ import torch.cuda
 from hydra.core.config_store import ConfigStore
 from torchrl.envs import ParallelEnv, EnvCreator
 from torchrl.envs.transforms import RewardScaling, TransformedEnv
-from torchrl.envs.utils import set_exploration_mode
+from omegaconf import OmegaConf
 from torchrl.modules import EGreedyWrapper
 from torchrl.record import VideoRecorder
 from torchrl.trainers.helpers.collectors import (
@@ -60,7 +60,9 @@ cs.store(name="config", node=Config)
 @hydra.main(version_base=None, config_path=None, config_name="config")
 def main(cfg: "DictConfig"):
     from torch.utils.tensorboard import SummaryWriter
-
+    if cfg.config_file is not None:
+        overriding_cfg = OmegaConf.load(cfg.config_file)
+        cfg = OmegaConf.merge(cfg, overriding_cfg)
     cfg = correct_for_frame_skip(cfg)
 
     if not isinstance(cfg.reward_scaling, float):
@@ -106,14 +108,8 @@ def main(cfg: "DictConfig"):
     model_explore = EGreedyWrapper(model, annealing_num_steps=cfg.annealing_frames).to(
         device
     )
-    if cfg.gSDE:
-        with torch.no_grad(), set_exploration_mode("random"):
-            # get dimensions to build the parallel env
-            proof_td = model(proof_env.reset().to(device))
-        action_dim_gsde, state_dim_gsde = proof_td.get("_eps_gSDE").shape[-2:]
-        del proof_td
-    else:
-        action_dim_gsde, state_dim_gsde = None, None
+
+    action_dim_gsde, state_dim_gsde = None, None
     proof_env.close()
     create_env_fn = parallel_env_constructor(
         cfg=cfg,
