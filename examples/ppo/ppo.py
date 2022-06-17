@@ -93,6 +93,8 @@ def main(args):
     video_tag = exp_name if args.record_video else ""
 
     stats = None
+    torch.manual_seed(args.seed)
+    np.random.seed(args.seed)
     if not args.vecnorm and args.norm_stats:
         proof_env = transformed_env_constructor(args=args, use_env_creator=False)()
         stats = get_stats_random_rollout(
@@ -105,7 +107,9 @@ def main(args):
     proof_env = transformed_env_constructor(
         args=args, use_env_creator=False, stats=stats
     )()
-
+    
+    torch.manual_seed(args.seed)
+    np.random.seed(args.seed)
     model = make_ppo_model(
         proof_env,
         args=args,
@@ -186,7 +190,9 @@ def main(args):
     if args.loss == "kl":
         trainer.register_op("pre_optim_steps", loss_module.reset)
 
-    final_seed = collector.set_seed(args.seed)
+    final_seed = args.seed
+    torch.manual_seed(args.seed)
+    np.random.seed(args.seed)
     print(f"init seed: {args.seed}, final seed: {final_seed}")
 
     trainer.train()
